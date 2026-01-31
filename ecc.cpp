@@ -1,13 +1,9 @@
-﻿// dynamic.cpp : Defines the entry point for the application.
-//
+/*
 
-#include "dynamic.h"
-#include "ecdsa.hpp"
-#include "ecc.hpp"
-#include "bigint.hpp"
+#include <vector>
 #include <string>
-
-using namespace std;
+#include <iostream>
+#include "ecdsa.hpp" 
 
 int main() {
     auto [publicKey, privateKey] = ECDH::generateKeyPair();
@@ -28,3 +24,4 @@ int main() {
 
     return 0;
 }
+*/

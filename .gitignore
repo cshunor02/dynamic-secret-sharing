@@ -42,6 +42,5 @@
 
 .vs/*
 out/*
-ecc-cpp
-ecc-cpp/*
-
+seal/*
+CppProperties.json
