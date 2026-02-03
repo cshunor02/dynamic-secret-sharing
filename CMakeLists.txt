@@ -17,7 +17,7 @@ add_executable (dynamic
     "ecc-cpp/src/ecdh.cpp"
     "ecc-cpp/src/ecdsa.cpp"
     "ecc-cpp/src/blake2b.cpp"
- "ecc.cpp" "main.cpp")
+ "ecc.cpp" "main.cpp" "polynomial.cpp" "bulletin.cpp")
 
 target_include_directories(dynamic PRIVATE 
     "${CMAKE_CURRENT_SOURCE_DIR}/ecc-cpp/include"

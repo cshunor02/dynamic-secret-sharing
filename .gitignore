@@ -42,5 +42,8 @@
 
 .vs/*
 out/*
+CMakeFiles/*
 seal/*
-CppProperties.json
+cmake_install.cmake
+CMakeSettings.json
+Makefile

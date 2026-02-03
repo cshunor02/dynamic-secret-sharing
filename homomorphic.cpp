@@ -10,8 +10,10 @@ class Homomorphic {
     private:
         unique_ptr<SEALContext> context;
     public:
-        // Initialization, set the modulus value
-        Homomorphic(size_t security) {
+        Homomorphic() {
+        }
+
+        void setParameters(size_t security) {
             EncryptionParameters parms(scheme_type::bfv);
             parms.set_poly_modulus_degree(security);
             parms.set_coeff_modulus(CoeffModulus::BFVDefault(security));
@@ -33,6 +35,9 @@ class Homomorphic {
             util::RNSIter secret_key(sk.data().data(), parms.poly_modulus_degree());
             util::sample_poly_ternary(prng, parms, secret_key);
 
+            auto ntt_tables = (*context->key_context_data()).small_ntt_tables();
+            util::ntt_negacyclic_harvey(secret_key, parms.coeff_modulus().size(), ntt_tables);
+
             sk.parms_id() = (*context->key_context_data()).parms_id();
 
             KeyGenerator keygen(*context, sk);
@@ -40,23 +45,23 @@ class Homomorphic {
             return; 
         }
 
-        void encryptSecret(PublicKey pk, int secret) {
-            Evaluator evaluator(*context);
+        Ciphertext encryptSecret(PublicKey pk, int secret) {
             Encryptor encryptor(*context, pk);
 
             Plaintext plaintext(to_string(secret));
 
             Ciphertext enc;
             encryptor.encrypt(plaintext, enc);
+
+            return enc;
+
         }
 
-        void decryptSecret(SecretKey sk, Plaintext& result) {
-            Evaluator evaluator(*context);
+        void decryptSecret(SecretKey sk, Ciphertext& enc, string& result) {
             Decryptor decryptor(*context, sk);
 
-            Ciphertext res;
             Plaintext plain_result;
-            decryptor.decrypt(res, plain_result);
+            decryptor.decrypt(enc, plain_result);
 
             result = plain_result.to_string();
 

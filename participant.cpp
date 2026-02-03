@@ -7,6 +7,10 @@
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <cmath>
+
+#include "polynomial.cpp"
+#include "bulletin.cpp"
 
 using namespace std;
 using namespace seal;
@@ -17,28 +21,33 @@ class Participant {
 		int secret; // random field element
 		PublicKey pk;
 		SecretKey sk;
-		vector<int> polynomial;
+		Polynomial polynomial;
 	public:
 		int port;
-		Participant(int s) {
+		Participant(int s, int mod, int id) : polynomial(mod) {
 			secret = s;
+			this->id = id;
 		}
 
-		void generateRandomPolynomial(int initial_users) {
-			srand(time(0));
-			for (int i = 0; i < initial_users; i++) {
-				polynomial.push_back(rand() % int(rand() * 100000));
-			}
+		void startPolynomialCalculation(int connected) {
+			polynomial.generateRandomPolynomial(connected - 1);
 			return;
 		}
 
-		void newUserPolynomialPoint() {
-			srand(time(0));
-			polynomial.push_back(rand() % int(rand() * 100000));
-			return;
+		// Get the which's user point
+		int getPointValue(int which) {
+			return polynomial.getPolynomial(secret, which - 1);
 		}
 
-		vector<int> getPolynomial() {
-			return polynomial;
+		void getKeyPairs(Bulletin &board) {
+			board.E.generateKeys(id, sk, pk);
+			
+			board.public_keys.push_back(pk);
+
+			//board.printKey(pk);
+		}
+
+		SecretKey getSk() {
+			return sk;
 		}
 };
