@@ -13,11 +13,11 @@ class Homomorphic {
         Homomorphic() {
         }
 
-        void setParameters(size_t security) {
+        void setParameters(size_t security, int modulo) {
             EncryptionParameters parms(scheme_type::bfv);
             parms.set_poly_modulus_degree(security);
             parms.set_coeff_modulus(CoeffModulus::BFVDefault(security));
-            parms.set_plain_modulus(1024);
+            parms.set_plain_modulus(modulo);
 
             context = make_unique<SEALContext>(parms);
         }
@@ -48,29 +48,38 @@ class Homomorphic {
         Ciphertext encryptSecret(PublicKey pk, int secret) {
             Encryptor encryptor(*context, pk);
 
-            Plaintext plaintext(to_string(secret));
+            stringstream ss;
+            ss << hex << secret;
+            string hexeds = ss.str();
+
+            Plaintext plaintext(hexeds);
 
             Ciphertext enc;
             encryptor.encrypt(plaintext, enc);
 
             return enc;
-
         }
 
-        void decryptSecret(SecretKey sk, Ciphertext& enc, string& result) {
+        void decryptSecret(SecretKey sk, Ciphertext& enc, int& result) {
             Decryptor decryptor(*context, sk);
 
             Plaintext plain_result;
             decryptor.decrypt(enc, plain_result);
 
-            result = plain_result.to_string();
-
+            result = stoi(plain_result.to_string(), nullptr, 16);
             return;
         }
 
-        void addSecrets(Ciphertext a, Ciphertext b, Ciphertext& res) {
+        void addShares(Ciphertext a, Ciphertext b, Ciphertext& res) {
             Evaluator evaluator(*context);
             evaluator.add(a, b, res);
             return;
+        }
+
+        Ciphertext sumShares(vector<Ciphertext> shares) {
+            Evaluator evaluator(*context);
+            Ciphertext res;
+            evaluator.add_many(shares, res);
+            return res;
         }
 };

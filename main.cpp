@@ -1,55 +1,85 @@
 #include <stdio.h>
 #include <iostream>
+#include <ctime>
 #include "participant.cpp"
 
 using namespace std;
 
-#define MODULO 10
-#define NUM_OF_PARTICIPANTS 2
+#define MODULO 1024
+#define NUM_OF_PARTICIPANTS 3
+#define t 3
 
 int main() {
-    Participant Alice(32, MODULO, 101);
-    Participant Bob(27, MODULO, 102);
+    srand(time(0));
+    //\\//\\//\\//\\
+    //  1. SETUP  \\
+    //\\//\\//\\//\\
 
     Bulletin bullet;
-    bullet.initialize(1024);
+    bullet.initialize(4096, MODULO); // the secrecy of E, modulo
 
-    Alice.startPolynomialCalculation(NUM_OF_PARTICIPANTS);
+    // Participant(secret, modulo, id)
+    vector<Participant> parties;
+    Participant Alice(32, MODULO, 1);
+    Participant Bob(27, MODULO, 2);
+    Participant Carol(3, MODULO, 3);
+
+    // TODO: Check whether id's are unique
+
+    //\\//\\//\\//\\//\\//\\//\\
+    //  2. SECRET GENERATION  \\
+    //\\//\\//\\//\\//\\//\\//\\
+
+    // For each i, Pi generates a pair of key pki, ski
     Alice.getKeyPairs(bullet);
-
-    Bob.startPolynomialCalculation(NUM_OF_PARTICIPANTS);
     Bob.getKeyPairs(bullet);
+    Carol.getKeyPairs(bullet);
+    
+    // Participants generate p(x) polynomials at degree t
+    Alice.startPolynomialCalculation(t);
+    Bob.startPolynomialCalculation(t);
+    Carol.startPolynomialCalculation(t);
 
-    int resA1 = Alice.getPointValue(1); //Alice's secret piece
-    int resA2 = Alice.getPointValue(2); //Bob's secret piece
+    parties.push_back(Alice);
+    parties.push_back(Bob);
+    parties.push_back(Carol);
 
-    int resB1 = Bob.getPointValue(1); //Alice's secret piece
-    int resB2 = Bob.getPointValue(2); //Bob's secret piece
+    for (int i = 0; i < NUM_OF_PARTICIPANTS; i++) {
+        vector<Ciphertext> collect;
+        for (int j = 0; j < NUM_OF_PARTICIPANTS; j++) {
+            int temp = parties[i].getPointValue(parties[j].id);
 
-    cout << "resA1 " << resA1 << endl;
-    cout << "resA2 " << resA2 << endl;
-    cout << "resB1 " << resB1 << endl;
-    cout << "resB2 " << resB2 << endl;
+            collect.push_back(bullet.E.encryptSecret(bullet.public_keys[j], temp));
+        }
+        bullet.shares.push_back(collect);
+    }
 
-    Ciphertext cipA1 = bullet.E.encryptSecret(bullet.public_keys[0], resA1);
-    Ciphertext cipB1 = bullet.E.encryptSecret(bullet.public_keys[1], resA2);
-    Ciphertext cipA2 = bullet.E.encryptSecret(bullet.public_keys[0], resB1);
-    Ciphertext cipB2 = bullet.E.encryptSecret(bullet.public_keys[1], resB2);
+    vector<Ciphertext> totals;
+    for (int i = 0; i < t; i++) {
+        totals.push_back(bullet.E.sumShares({ bullet.shares[0][i], bullet.shares[1][i], bullet.shares[2][i] }));
+    }
 
-    Ciphertext res;
-    string ress;
+    vector<int> final_numbers;
+    int temp;
+    for (int i = 0; i < t; i++) {
+        bullet.E.decryptSecret(parties[i].getSk(), totals[i], temp);
+        final_numbers.push_back(temp);
+        cout << (i+1) << "th share: " << temp << endl;
+    }
 
-    // Alice adds up A1 and B1
-    bullet.E.addSecrets(cipA1, cipA2, res);
+    //cout << "Together's secret: " << Polynomial::lagrange({ {Alice.id, final_numbers[0]}, {Bob.id, final_numbers[1]}, {Carol.id, final_numbers[2]} }, MODULO) << endl;
 
-    bullet.E.decryptSecret(Alice.getSk(), res, ress);
-    cout << ress << endl;
+    //\\//\\//\\//\\//\\//\\//\\
+    //   3.SHARE GENERATION   \\
+    //\\//\\//\\//\\//\\//\\//\\
 
-    // Bob adds together A2 and B2 
-    bullet.E.addSecrets(cipB1, cipB2, res);
+    Participant Dave(0, MODULO, 4);
+    Dave.getKeyPairs(bullet);
 
-    bullet.E.decryptSecret(Bob.getSk(), res, ress);
-    cout << ress << endl;
+    // Choose random leader
+
+    int leader = rand() % NUM_OF_PARTICIPANTS;
+
 
     return 0;
 }

@@ -14,20 +14,19 @@ class Bulletin {
 public:
 	Homomorphic E;
 	vector<PublicKey> public_keys;
+	vector<vector<Ciphertext>> shares;
+	int modulo;
 
 	Bulletin() {
 	}
 
-	void initialize(size_t security) {
-		E.setParameters(security);
+	// t participants agree on an additive homomorphic encryption E and add E to the public bulletin board
+	void initialize(size_t security, int modulo) {
+		E.setParameters(security, modulo);
+		this->modulo = modulo;
 		return;
 	}
 
-	void printKey(PublicKey key) {
-		stringstream ss;
-		key.save(ss);
-		cout << "Public Key Size: " << ss.str().size() << " bytes" << endl;
-		return;
-	}
+	
 	
 };

@@ -17,16 +17,16 @@ using namespace seal;
 
 class Participant {
 	private:
-		int id;
 		int secret; // random field element
 		PublicKey pk;
 		SecretKey sk;
-		Polynomial polynomial;
 	public:
+		int id;
+		Polynomial polynomial;
 		int port;
-		Participant(int s, int mod, int id) : polynomial(mod) {
+		Participant(int s, int mod, int given_id) : polynomial(mod) {
 			secret = s;
-			this->id = id;
+			id = given_id;
 		}
 
 		void startPolynomialCalculation(int connected) {
@@ -36,7 +36,7 @@ class Participant {
 
 		// Get the which's user point
 		int getPointValue(int which) {
-			return polynomial.getPolynomial(secret, which - 1);
+			return polynomial.getPolynomial(secret, which);
 		}
 
 		void getKeyPairs(Bulletin &board) {
@@ -49,5 +49,15 @@ class Participant {
 
 		SecretKey getSk() {
 			return sk;
+		}
+
+		Ciphertext newUserJoin(int newUserId, PublicKey newUserPK, int share, vector<array<int, 2>> points, Bulletin& board) {
+			double lambda = Polynomial::lagrangeBasisPolynomial(points, id, newUserId);
+
+			int newShare = (int)round(share * lambda) % board.modulo;
+			if (newShare < 0) {
+				newShare += board.modulo;
+			}
+			return board.E.encryptSecret(newUserPK, newShare);
 		}
 };
