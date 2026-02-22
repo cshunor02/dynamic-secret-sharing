@@ -9,6 +9,9 @@ project ("dynamic")
 
 find_package(SEAL REQUIRED)
 
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(ZMQ libzmq)
+
 add_executable (dynamic 
     "homomorphic.cpp" 
     "homomorphic.h"
@@ -17,14 +20,16 @@ add_executable (dynamic
     "ecc-cpp/src/ecdh.cpp"
     "ecc-cpp/src/ecdsa.cpp"
     "ecc-cpp/src/blake2b.cpp"
- "ecc.cpp" "main.cpp" "polynomial.cpp" "bulletin.cpp")
+ "ecc.cpp" "main.cpp" "polynomial.cpp" "bulletin.cpp" "zmq.hpp")
 
 target_include_directories(dynamic PRIVATE 
     "${CMAKE_CURRENT_SOURCE_DIR}/ecc-cpp/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/ecc-cpp/src"
+    "${CMAKE_CURRENT_SOURCE_DIR}/libzmq/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}"
 )
 
-target_link_libraries(dynamic PRIVATE gmp SEAL::seal)
+target_link_libraries(dynamic PRIVATE gmp SEAL::seal ${ZMQ_LIBRARIES} pthread)
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)
   set_property(TARGET dynamic PROPERTY CXX_STANDARD 20)

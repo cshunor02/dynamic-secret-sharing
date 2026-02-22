@@ -8,8 +8,8 @@ using namespace seal;
 
 class Homomorphic {
     private:
-        unique_ptr<SEALContext> context;
     public:
+        unique_ptr<SEALContext> context;
         Homomorphic() {
         }
 
@@ -81,5 +81,19 @@ class Homomorphic {
             Ciphertext res;
             evaluator.add_many(shares, res);
             return res;
+        }
+
+        int getNoiseBudget(Ciphertext& encrypted, SecretKey secret_key) {
+            Decryptor decryptor(*context, secret_key);
+
+            int budget = decryptor.invariant_noise_budget(encrypted);
+            return budget;
+        }
+
+        void loadCiphertext(Ciphertext& destination, istream& stream) {
+            if (!context) {
+                throw runtime_error("SEALContext is not initialized. Call setParameters first.");
+            }
+            destination.load(*context, stream);
         }
 };

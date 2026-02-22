@@ -5,8 +5,12 @@
 #include <cstring>
 #include <sstream>
 
+#include <zmq.hpp>
+#include <zmq_addon.hpp>
+
 using namespace std;
 using namespace seal;
+using namespace zmq;
 
 #include "homomorphic.cpp"
 
@@ -25,8 +29,5 @@ public:
 		E.setParameters(security, modulo);
 		this->modulo = modulo;
 		return;
-	}
-
-	
-	
+	}	
 };

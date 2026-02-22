@@ -41,9 +41,14 @@
 *.dwo
 
 .vs/*
-out/*
+.out/*
 CMakeFiles/*
 seal/*
 cmake_install.cmake
 CMakeSettings.json
-Makefile
+.Makefile
+build/*
+out/*
+zmq.hpp
+zmq_addon.hpp
+libzmq
