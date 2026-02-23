@@ -19,7 +19,11 @@ public:
 	Homomorphic E;
 	vector<PublicKey> public_keys;
 	vector<vector<Ciphertext>> shares;
+	vector<int> ids;
+	vector<array<int, 2>> points;
+
 	int modulo;
+	int t;
 
 	Bulletin() {
 	}
@@ -29,5 +33,13 @@ public:
 		E.setParameters(security, modulo);
 		this->modulo = modulo;
 		return;
-	}	
+	}
+
+	// TODO : sum up the shares, after everyone uploaded their shares
+	/*
+	vector<Ciphertext> totals;
+    for (int i = 0; i < t; ++i) {
+        totals.push_back(bullet.E.sumShares({ bullet.shares[0][i], bullet.shares[1][i], bullet.shares[2][i] }));
+    }
+	*/
 };

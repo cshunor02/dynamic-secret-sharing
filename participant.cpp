@@ -30,8 +30,9 @@ class Participant {
 		SecretKey sk;
 		bool leader = false;
 		Bulletin &bullet;
+		int summed_piece;
 	public:
-		bool stopProcess = false;
+		bool stopReceiving = false;
 		int id;
 		Polynomial polynomial;
 		string location;
@@ -52,92 +53,174 @@ class Participant {
 
 		void getKeyPairs(Bulletin &board) {
 			board.E.generateKeys(id, sk, pk);
-			
 			board.public_keys.push_back(pk);
-
-			//board.printKey(pk);
 		}
 
 		SecretKey getSk() {
 			return sk;
 		}
 
-		Ciphertext newUserJoin(int newUserId, PublicKey newUserPK, int share, vector<array<int, 2>> points, Bulletin& board, int mask) {
+		Ciphertext newUserJoin(int newUserId, PublicKey newUserPK, int share, vector<array<int, 2>> points, int modulo, Homomorphic& E, int mask) {
 			double lambda = Polynomial::lagrangeBasisPolynomial(points, id, newUserId);
 
-			int newShare = ((int)round(share * lambda) + mask )% board.modulo;
-			if (newShare < 0) {
-				newShare += board.modulo;
+			int newShare = ((int)round(share * lambda) + mask )% modulo;
+			while (newShare < 0) {
+				newShare += modulo;
 			}
-			return board.E.encryptSecret(newUserPK, newShare);
+			return E.encryptSecret(newUserPK, newShare);
 		}
 
+		// https://zguide.zeromq.org/docs/chapter3/#The-DEALER-to-REP-Combination
 		void startServer() {
-			context_t context{ 1 };
+			context_t context(1);
+			socket_t broker(context, ZMQ_ROUTER);
 
-			socket_t socket{ context, zmq::socket_type::rep }; // rep is for reply
-			socket.bind("tcp://127.0.0.1:*");
+			broker.bind("tcp://127.0.0.1:*");
 
 			cout << "Server has been started for " << this->id << endl;
 
-			socket.set(sockopt::rcvtimeo, 200); // Time limit
+			broker.set(sockopt::rcvtimeo, 200); // Time limit
 
-			const string last_endpoint = socket.get(zmq::sockopt::last_endpoint);
-			this->location = last_endpoint;
+			string getLocation = broker.get(sockopt::last_endpoint);
+			this->location = getLocation;
 
-			for (;stopProcess == false;)
-			{
-				cout << "I've been waiting for a message " << this-> id << "..." << endl;
-				message_t request;
+			pollitem_t items[] = {
+				{ broker, 0, ZMQ_POLLIN, 0 } };
 
-				auto result = socket.recv(request, recv_flags::none);
-				if (result) {
-					cout << "Received secret piece!";
+			startSecretGeneration();
+			startShareGeneration();
 
-					string data(static_cast<char*>(request.data()), request.size());
-					stringstream ss(data);
+			/*
+			try {
+				while (!stopReceiving) {
+					poll(items, 1, chrono::milliseconds(10));
 
-					Ciphertext result_cip;
-					bullet.E.loadCiphertext(result_cip, ss);
-
-					int temp;
-					bullet.E.decryptSecret(getSk(), result_cip, temp);
-
-					cout << " and the secret piece is: " << temp << endl;
-
-					// send the reply to the client
-					socket.send(str_buffer("ACK"));
-					// simulate work
-					this_thread::sleep_for(1s);
+					if (items[0].revents & ZMQ_POLLIN) {
+						receiveMessage(broker);
+					}
 				}
 			}
+			catch (exception &e) {}
+			*/
+		}
+
+		//https://stackoverflow.com/questions/73803967/zmqmessage-t-assign-a-string
+		void receiveMessage(socket_t& broker) {
+			message_t identity;
+			message_t msg;
+			broker.recv(identity, recv_flags::none);
+			broker.recv(msg, recv_flags::none);
+
+			string data(static_cast<char*>(msg.data()), msg.size()); //https://www.geeksforgeeks.org/cpp/static_cast-in-cpp/
+			stringstream ss(data);
+
+			Ciphertext result;
+			bullet.E.loadCiphertext(result, ss);
+
+			int temp;
+			bullet.E.decryptSecret(getSk(), result, temp);
+
+			cout << temp << endl;
+			return;
 		}
 
 		void sendMessage(string dest, const Ciphertext& piece) {
-			context_t context{ 1 };
-			socket_t socket(context, socket_type::req); // req is for request
+			context_t context(1);
+			socket_t worker(context, ZMQ_DEALER);
 
-			socket.set(sockopt::rcvtimeo, 2000);
-			socket.set(sockopt::sndtimeo, 2000);
-
-			socket.connect(dest);
+			worker.connect(dest);
 
 			stringstream ss;
 			piece.save(ss);
 			string ssd = ss.str();
 
 			cout << "Sending secret piece (" << ssd.size() << " bytes)..." << endl;
-			socket.send(buffer(ssd), send_flags::none);
+			worker.send(buffer(ssd));
+		}
 
-			// wait for reply from server
-			message_t reply;
-			auto result = socket.recv(reply, recv_flags::none);
 
-			if (result) {
-				cout << "[Client] Success! Server replied: " << reply.to_string() << endl;
+		//\\//\\//\\//\\//\\//\\//\\
+		//  2. SECRET GENERATION  \\
+		//\\//\\//\\//\\//\\//\\//\\
+
+		void startSecretGeneration() {
+			getKeyPairs(bullet); // For each i, Pi generates a pair of key pki, ski
+			startPolynomialCalculation(bullet.t); // Participants generate p(x) polynomials at degree t
+
+			int max_users = bullet.ids.size();
+
+			vector<Ciphertext> collect;
+			for (int i = 0; i < max_users; ++i) {
+				int temp = getPointValue(bullet.ids[i]);
+				collect.push_back(bullet.E.encryptSecret(bullet.public_keys[i], temp));
 			}
-			else {
-				cerr << "[Client] Error: Timeout or peer disconnected." << endl;
+			bullet.shares.push_back(collect);
+
+			// Download shares
+
+			// TODO : wait until bullet.shares reaces max_users size
+			//        after it, download TOTAL
+
+			Ciphertext total;
+
+			bullet.E.decryptSecret(getSk(), total, summed_piece);
+
+			// TODO : store result in private
+			return;
+		}
+
+		//\\//\\//\\//\\//\\//\\//\\
+		//   3.SHARE GENERATION   \\
+		//\\//\\//\\//\\//\\//\\//\\
+
+		void startShareGeneration() {
+			int mask = rand();
+
+			Ciphertext newPiece = newUserJoin(
+				bullet.ids.back(),
+				*(bullet.public_keys.end() - 1),
+				summed_piece,
+				bullet.points,
+				bullet.modulo,
+				bullet.E,
+				mask
+			);
+
+			// TODO : Multiparti computation for SUM masks
+
+			int sum_masks = 0;
+
+			sum_masks *= -1;
+			sum_masks %= bullet.modulo;
+
+			while (sum_masks < 0) {
+				sum_masks += bullet.modulo;
 			}
+
+			// TODO : Only leader does the following:
+
+			// new_shares is what the other clients calculated in newPiece and uploaded in the bullet
+
+			vector<Ciphertext> new_shares;
+			int max_users = bullet.ids.size();
+
+			for (int i = 0; i < max_users; ++i) {
+				new_shares.push_back(bullet.shares[i][max_users]);
+			}
+
+			Ciphertext result = bullet.E.sumShares(new_shares);
+			Ciphertext mask_enc = bullet.E.encryptSecret(*(bullet.public_keys.end() - 1), sum_masks);
+
+			Ciphertext newUserShare;
+			bullet.E.addShares(result, mask_enc, newUserShare);
+
+			// TODO : Leader sends this to the new user
+
+			/*
+			* New user can decrypt it: 
+			* 
+			int new_piece;
+			bullet.E.decryptSecret(Dave.getSk(), dave_share, new_piece);
+			*/
 		}
 };

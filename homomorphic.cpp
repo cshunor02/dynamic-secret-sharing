@@ -24,7 +24,7 @@ class Homomorphic {
 
         // Using seal/native/src/seal/keygenerator.cpp as reference
         // from line 67 to 81
-        void generateKeys(int id, SecretKey& sk, PublicKey& pk) {
+        void generateKeys(long unsigned int id, SecretKey& sk, PublicKey& pk) {
             array<uint64_t, 8> seed = { id, 0, 0, 0, 0, 0, 0, 0 };
             auto prng = Blake2xbPRNGFactory(seed).create();
 
@@ -90,10 +90,7 @@ class Homomorphic {
             return budget;
         }
 
-        void loadCiphertext(Ciphertext& destination, istream& stream) {
-            if (!context) {
-                throw runtime_error("SEALContext is not initialized. Call setParameters first.");
-            }
-            destination.load(*context, stream);
+        void loadCiphertext(Ciphertext& dest, istream& stream) {
+            dest.load(*context, stream);
         }
 };

@@ -20,7 +20,7 @@ public:
 	Polynomial(int mod) : modulo(mod) {}
 
 	void generateRandomPolynomial(int initial_users) {
-		for (int i = 0; i < initial_users; i++) {
+		for (int i = 0; i < initial_users; ++i) {
 			polynomial.push_back((rand() % int(rand() * MAX_RAND)) % modulo);
 		}
 		return;
@@ -36,7 +36,7 @@ public:
 	}
 
 	bool lagrangeCorrectPoints(vector<array<int, 2>> points) {
-		for (int i = 0; i < points.size(); i++) {
+		for (int i = 0; i < points.size(); ++i) {
 			for (int j = i + 1; j < points.size(); j++) {
 				if (points[i][0] == points[j][0]) {
 					return false;
@@ -48,7 +48,7 @@ public:
 
 	static double lagrangeBasisPolynomial(vector<array<int, 2>> points, int value, int x) {
 		double multiplication = 1.0;
-		for (int i = 0; i < points.size(); i++) {
+		for (int i = 0; i < points.size(); ++i) {
 			if (points[i][0] != value) {
 				multiplication *= (double)(x - points[i][0]) / (value - points[i][0]);
 			}
@@ -58,7 +58,7 @@ public:
 
 	static int lagrange(vector<array<int, 2>> points, int modulo) {
 		double sum = 0;
-		for (int i = 0; i < points.size(); i++) {
+		for (int i = 0; i < points.size(); ++i) {
 			sum += lagrangeBasisPolynomial(points, points[i][0], 0) * (double)points[i][1]; // Check the secret at 0
 		}
 		int temp = (int)round(sum) % modulo;
