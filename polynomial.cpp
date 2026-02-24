@@ -20,6 +20,7 @@ public:
 	Polynomial(int mod) : modulo(mod) {}
 
 	void generateRandomPolynomial(int initial_users) {
+		polynomial = {};
 		for (int i = 0; i < initial_users; ++i) {
 			polynomial.push_back((rand() % int(rand() * MAX_RAND)) % modulo);
 		}

@@ -30,7 +30,7 @@ int main() {
     vector<thread> threads;
 
     for (int i = 0; i < NUM_OF_PARTICIPANTS; ++i) {
-        Participant temp_user(rand(), MODULO, (i + 1), bullet);
+        Participant temp_user(rand(),MODULO, (i + 1), bullet);
         thread temp(bind(&Participant::startServer, &temp_user));
         threads.push_back(temp);
     }

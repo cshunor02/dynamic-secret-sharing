@@ -21,6 +21,7 @@ public:
 	vector<vector<Ciphertext>> shares;
 	vector<int> ids;
 	vector<array<int, 2>> points;
+	vector<string> destinations;
 
 	int modulo;
 	int t;
