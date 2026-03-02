@@ -22,6 +22,7 @@ public:
 	vector<int> ids;
 	vector<array<int, 2>> points;
 	vector<string> destinations;
+	int leaderId;
 
 	int modulo;
 	int t;
@@ -30,17 +31,13 @@ public:
 	}
 
 	// t participants agree on an additive homomorphic encryption E and add E to the public bulletin board
-	void initialize(size_t security, int modulo) {
+	void initialize(size_t security, int modulo, int treshold) {
 		E.setParameters(security, modulo);
 		this->modulo = modulo;
+		this->t = treshold;
 		return;
 	}
 
-	// TODO : sum up the shares, after everyone uploaded their shares
-	/*
-	vector<Ciphertext> totals;
-    for (int i = 0; i < t; ++i) {
-        totals.push_back(bullet.E.sumShares({ bullet.shares[0][i], bullet.shares[1][i], bullet.shares[2][i] }));
-    }
-	*/
+
+
 };

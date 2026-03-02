@@ -19,55 +19,84 @@ using namespace zmq;
 #define t 3
 
 int main() {
-    srand(time(0));
     //\\//\\//\\//\\
     //  1. SETUP  \\
     //\\//\\//\\//\\
 
+    srand(time(0));
     Bulletin bullet;
-    bullet.initialize(4096, MODULO); // the secrecy of E, modulo
+    bullet.initialize(4096, MODULO, t); // the secrecy of E, modulo
 
-    vector<thread> threads;
+    vector<Participant*> participants;
 
     for (int i = 0; i < NUM_OF_PARTICIPANTS; ++i) {
-        Participant temp_user(rand(),MODULO, (i + 1), bullet);
-        thread temp(bind(&Participant::startServer, &temp_user));
-        threads.push_back(temp);
+        int secret = rand() % MODULO;
+        int id = i + 1;
+
+        Participant* p = new Participant(secret, MODULO, id, bullet);
+        p->location = "tcp://127.0.0.1:" + to_string(5550 + id); // 5551, 5552, 5553
+
+        participants.push_back(p);
+
+        bullet.ids.push_back(id);
+        bullet.destinations.push_back(p->location);
+        bullet.points.push_back({ id, 0 });
     }
 
     //\\//\\//\\//\\//\\//\\//\\
     //  2. SECRET GENERATION  \\
     //\\//\\//\\//\\//\\//\\//\\
     
-    //cout << "Together's (A,B,C) secret: " << Polynomial::lagrange({ {Alice.id, final_numbers[0]}, {Bob.id, final_numbers[1]}, {Carol.id, final_numbers[2]} }, MODULO) << endl;
-
+    for (auto p : participants) {
+        p->startSecretGeneration();
+    }
 
     //\\//\\//\\//\\//\\//\\//\\
     //   3.SHARE GENERATION   \\
     //\\//\\//\\//\\//\\//\\//\\
 
-    Participant temp_user2(0, MODULO, (NUM_OF_PARTICIPANTS+1), bullet);
-    thread t1(bind(&Participant::startServer, &temp_user2));
-    threads.push_back(t1);
+    Participant* new_user = new Participant(0, MODULO, NUM_OF_PARTICIPANTS + 1, bullet);
+    new_user->location = "tcp://127.0.0.1:5560";
+
+    new_user->getKeyPairs(bullet);
+    bullet.ids.push_back(new_user->id);
+    bullet.destinations.push_back(new_user->location);
 
     // TODO : Chose random leader by Bulletin
 
-    int leader = rand() % NUM_OF_PARTICIPANTS;
+    bullet.leaderId = rand() % NUM_OF_PARTICIPANTS;
+    
+    participants[bullet.leaderId]->leader = true;
 
-
-    /*
-    // PoC
-    cout << "Together's (B,C,D) secret: " << Polynomial::lagrange({ {Bob.id, final_numbers[1]}, {Carol.id, final_numbers[2]}, { Dave.id, new_piece} }, MODULO) << endl;
-
-    cout << "Remaining Noise Budget: " << bullet.E.getNoiseBudget(totals[0], Alice.getSk()) << " bits" << endl;
-    cout << "Remaining Noise Budget: " << bullet.E.getNoiseBudget(totals[1], Bob.getSk()) << " bits" << endl;
-    cout << "Remaining Noise Budget: " << bullet.E.getNoiseBudget(totals[2], Carol.getSk()) << " bits" << endl;
-    cout << "Remaining Noise Budget: " << bullet.E.getNoiseBudget(dave_share, Dave.getSk()) << " bits" << endl;
-    */
-
-    for (int i = 0; i < threads.size(); ++i) {
-        threads[i].join();
+    vector<thread> threads;
+    for (auto p : participants) {
+        threads.push_back(thread(&Participant::startServer, p));
     }
+    threads.push_back(thread(&Participant::startServer, new_user));
+
+    this_thread::sleep_for(chrono::milliseconds(500));
+
+    vector<thread> worker_threads;
+    for (auto p : participants) {
+        worker_threads.push_back(thread(&Participant::startShareGeneration, p));
+    }
+
+    // Megvárjuk, amíg mindenki befejezi az üzenetküldést és összegzést
+    for (auto& x : worker_threads) {
+        x.join();
+    }
+
+    this_thread::sleep_for(chrono::seconds(1));
+
+    for (auto p : participants) p->stopReceiving = true;
+    new_user->stopReceiving = true;
+
+    // Megvárjuk, míg a szerverszálak leállnak
+    for (auto& x : threads) x.join();
+
+    // Memória felszabadítás
+    for (auto p : participants) delete p;
+    delete new_user;
 
     return 0;
 }
