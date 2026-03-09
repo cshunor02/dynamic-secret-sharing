@@ -34,7 +34,7 @@ int main() {
         int id = i + 1;
 
         Participant* p = new Participant(secret, MODULO, id, bullet);
-        p->location = "tcp://127.0.0.1:" + to_string(5550 + id); // 5551, 5552, 5553
+        p->location = "tcp://127.0.0.1:" + to_string(5550 + id);
 
         participants.push_back(p);
 
@@ -55,14 +55,12 @@ int main() {
     //   3.SHARE GENERATION   \\
     //\\//\\//\\//\\//\\//\\//\\
 
-    Participant* new_user = new Participant(0, MODULO, NUM_OF_PARTICIPANTS + 1, bullet);
-    new_user->location = "tcp://127.0.0.1:5560";
+    Participant* newUser = new Participant(0, MODULO, NUM_OF_PARTICIPANTS + 1, bullet);
+    newUser->location = "tcp://127.0.0.1:5560";
 
-    new_user->getKeyPairs(bullet);
-    bullet.ids.push_back(new_user->id);
-    bullet.destinations.push_back(new_user->location);
-
-    // TODO : Chose random leader by Bulletin
+    newUser->getKeyPairs(bullet);
+    bullet.ids.push_back(newUser->id);
+    bullet.destinations.push_back(newUser->location);
 
     bullet.leaderId = rand() % NUM_OF_PARTICIPANTS;
     
@@ -72,31 +70,30 @@ int main() {
     for (auto p : participants) {
         threads.push_back(thread(&Participant::startServer, p));
     }
-    threads.push_back(thread(&Participant::startServer, new_user));
+    threads.push_back(thread(&Participant::startServer, newUser));
 
     this_thread::sleep_for(chrono::milliseconds(500));
 
-    vector<thread> worker_threads;
+    vector<thread> workerThreads;
     for (auto p : participants) {
-        worker_threads.push_back(thread(&Participant::startShareGeneration, p));
+        workerThreads.push_back(thread(&Participant::startShareGeneration, p));
     }
 
-    // Megvárjuk, amíg mindenki befejezi az üzenetküldést és összegzést
-    for (auto& x : worker_threads) {
+    for (auto& x : workerThreads) {
         x.join();
     }
 
     this_thread::sleep_for(chrono::seconds(1));
 
     for (auto p : participants) p->stopReceiving = true;
-    new_user->stopReceiving = true;
+    newUser->stopReceiving = true;
 
-    // Megvárjuk, míg a szerverszálak leállnak
     for (auto& x : threads) x.join();
 
-    // Memória felszabadítás
     for (auto p : participants) delete p;
-    delete new_user;
+    delete newUser;
+
+    cout << "Done" << endl;
 
     return 0;
 }

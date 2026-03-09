@@ -186,20 +186,34 @@ class Participant {
 		//\\//\\//\\//\\//\\//\\//\\
 
 		void startShareGeneration() {
+			int max_users = bullet.t;
+
+			int temp = -1;
+			for (int i = 0; i < max_users; ++i) {
+				if (bullet.ids[i] == id) {
+					temp = i;
+					break;
+				}
+			}
+			if (temp == -1) {
+				return;
+			}
 			// Share generation Step 2-4
 
 			int mask = rand() % bullet.modulo;						// Step 4
-
 			int newUserId = bullet.ids.back();						// Step 2
 			PublicKey newUserPk = *(bullet.public_keys.end() - 1);  // Step 2
-			int max_users = bullet.ids.size() - 1;
 
+			vector<array<int, 2>> tNumberOfPoints;
+			for (int i = 0; i < max_users; ++i) {
+				tNumberOfPoints.push_back(bullet.points[i]);
+			}
 
 			Ciphertext newPiece = newUserJoin(						// Step 3 and 5
 				newUserId,
 				newUserPk,
 				secret,
-				bullet.points,
+				tNumberOfPoints,
 				bullet.modulo,
 				bullet.E,
 				mask
@@ -267,7 +281,7 @@ class Participant {
 		}
 
 		void leaderTasks() {
-			int max_users = bullet.ids.size() - 1;
+			int max_users = bullet.t;
 
 			unique_lock<mutex> lock(leaderMutex);
 			leaderCv.wait(lock, [this, max_users] {
