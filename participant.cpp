@@ -11,6 +11,7 @@
 #include <chrono>
 #include <thread>
 #include <string>
+#include <chrono>
 
 #include <zmq.hpp>
 #include <zmq_addon.hpp>
@@ -33,10 +34,10 @@ class Participant {
 		context_t context;					
 		socket_t broker;
 		pollitem_t items[1];
-		vector<int> maskBuffer, sumMaskBuffer;
+		vector<int> maskBuffer, sumMaskBuffer, refreshBuffer, reconstructBuffer;
 		vector<Ciphertext> leaderBuffer;
-		mutex maskMutex, leaderMutex;
-		condition_variable maskCv, leaderCv;
+		mutex maskMutex, leaderMutex, reconstructMutex, refreshMutex;
+		condition_variable maskCv, leaderCv, reconstructCv, refreshCv;
 
 	public:
 		bool leader = false;				// is the Participant a leader?
@@ -75,12 +76,12 @@ class Participant {
 			return E.encryptSecret(newUserPK, newShare);
 		}
 
-		// https://zguide.zeromq.org/docs/chapter3/#The-DEALER-to-REP-Combination
+		// https://zguide.zeromq.org/docs/chapter3/#The-DEALER-to-ROUTER-Combination
 		void startServer() {
 			broker.bind(location);
 			this->location = broker.get(sockopt::last_endpoint);
 
-			broker.set(sockopt::rcvtimeo, 200); // Time limit
+			broker.set(sockopt::rcvtimeo, 100); // Time limit
 
 			try {
 				while (!stopReceiving) {
@@ -163,6 +164,16 @@ class Participant {
 
 				decryptAndSaveSecret(newShare);
 			}
+			else if (typeSwitch == "rec") {
+				lock_guard<mutex> lock(reconstructMutex);
+				reconstructBuffer.push_back(stoi(data));
+				reconstructCv.notify_one();
+			}
+			else if (typeSwitch == "ref") {
+				lock_guard<mutex> lock(refreshMutex);
+				refreshBuffer.push_back(stoi(data));
+				refreshCv.notify_one();
+			}
 			else {
 				cout << "typeSwitch: " << typeSwitch << endl;
 				throw new exception;
@@ -177,7 +188,7 @@ class Participant {
 		void startSecretGeneration() {
 			getKeyPairs(bullet);	// For each i, Pi generates a pair of key pki, ski
 
-			bullet.shares.push_back({ id, bullet.E.encryptSecret(pk, secret) });
+			bullet.shares.push_back(bullet.E.encryptSecret(pk, secret));
 			return;
 		}
 
@@ -219,9 +230,7 @@ class Participant {
 				mask
 			);
 
-			// TODO : Send newPiece to Leader
 			if (leader) {
-				// receive pieces -> HOW?
 				unique_lock<mutex> lock(leaderMutex);
 				leaderBuffer.push_back(newPiece);
 			}
@@ -263,6 +272,8 @@ class Participant {
 				sum += x;
 				sum %= bullet.modulo;
 			}
+
+			maskBuffer.clear();
 
 			// Send mask sum to Leader - Step 7 part 2
 
@@ -307,8 +318,13 @@ class Participant {
 
 			Ciphertext sumEncShares = bullet.E.sumShares(leaderBuffer);
 
+			sumMaskBuffer.clear();
+			leaderBuffer.clear();
+
 			Ciphertext newUserShare;
 			bullet.E.addShares(encMask, sumEncShares, newUserShare);
+
+			bullet.shares.push_back(newUserShare);
 
 			sendMsg(bullet.destinations.back(), newUserShare, "new");
 
@@ -321,4 +337,121 @@ class Participant {
 			secret = new_piece;
 			return;
 		}
+
+		//\\//\\//\\//\\//\\//\\//\\
+		//    4.RECONSTRUCTION    \\
+		//\\//\\//\\//\\//\\//\\//\\
+
+		int startSecretReconstruction() {
+			int max_users = bullet.t;
+
+			int temp = -1;
+			for (int i = 0; i < max_users; ++i) {
+				if (bullet.ids[i] == id) {
+					temp = i;
+					break;
+				}
+			}
+			if (temp == -1) {
+				return 0;
+			}
+
+			vector<std::array<int, 2>> points(bullet.points.begin(), bullet.points.begin() + bullet.t);
+
+			int lambda = Polynomial::lagrangeBasisPolynomial(points, id, 0);
+			lambda %= bullet.modulo;
+
+			temp = (secret * lambda) % bullet.modulo;
+
+			for (int i = 0; i < max_users; ++i) {
+				if (bullet.ids[i] == id) {
+					lock_guard<mutex> lock(reconstructMutex);
+					reconstructBuffer.push_back(temp);
+				}
+				else {
+					sendMsg(bullet.destinations[i], temp, "rec");
+				}
+			}
+
+			unique_lock<mutex> lock(reconstructMutex);
+			reconstructCv.wait(lock, [this, max_users] {
+				return reconstructBuffer.size() >= max_users;
+			});
+
+			temp = 0;
+			for (int x : reconstructBuffer) {
+				temp += x;
+				temp %= bullet.modulo;
+			}
+			
+			reconstructBuffer.clear();
+
+			return temp;
+		}
+
+		//\\//\\//\\//\\//\\//\\//\\
+		//       5. REFRESH       \\
+		//\\//\\//\\//\\//\\//\\//\\
+
+		void startproactiveRefresh() {
+			int max_users = bullet.shares.size();
+
+			int temp = -1;
+			for (int i = 0; i < max_users; ++i) {
+				if (bullet.ids[i] == id) {
+					temp = i;
+					break;
+				}
+			}
+
+			if (temp == -1) return;
+
+			vector<int> new_poly(max_users);
+			new_poly[0] = 0;
+			for (int i = 1; i < bullet.t; ++i) {
+				new_poly[i] = rand() % bullet.modulo;
+			}
+
+			for (int i = 0; i < max_users; ++i) {
+				int x = 0;
+				temp = bullet.ids[i];
+				for (int c = 1; c < bullet.t; ++c) {
+					x += (long long)((new_poly[c] * temp) % bullet.modulo) % bullet.modulo;
+
+					temp *= bullet.ids[i];
+					temp %= bullet.modulo;
+				}
+
+				if (bullet.ids[i] == this->id) {
+					lock_guard<mutex> lock(refreshMutex);
+					refreshBuffer.push_back(x);
+				}
+				else {
+					sendMsg(bullet.destinations[i], x, "ref");
+				}
+			}
+
+			unique_lock<mutex> lock(refreshMutex);
+			refreshCv.wait(lock, [this, max_users] {
+				return refreshBuffer.size() >= max_users;
+			});
+
+			int sum = 0;
+			for (int x : refreshBuffer) {
+				sum += x;
+			}
+			sum %= bullet.modulo;
+			refreshBuffer.clear(); 
+
+			secret += sum;
+			secret %= bullet.modulo;
+
+			if (this->id != -1 && this->id < bullet.shares.size()) {
+				bullet.shares[this->id] = bullet.E.encryptSecret(pk, secret);
+			}
+
+			return;
+		}
+
+		
 };

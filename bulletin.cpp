@@ -18,7 +18,7 @@ class Bulletin {
 public:
 	Homomorphic E;
 	vector<PublicKey> public_keys;
-	vector<vector<Ciphertext>> shares;
+	vector<Ciphertext> shares;
 	vector<int> ids;
 	vector<array<int, 2>> points;
 	vector<string> destinations;
