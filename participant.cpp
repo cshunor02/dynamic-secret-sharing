@@ -12,6 +12,7 @@
 #include <thread>
 #include <string>
 #include <chrono>
+#include <atomic>
 
 #include <zmq.hpp>
 #include <zmq_addon.hpp>
@@ -26,7 +27,6 @@ using namespace zmq;
 
 class Participant {
 	private:
-		int secret;							// random field element
 		PublicKey pk;						// Public key
 		SecretKey sk;						// Secret key
 		Bulletin &bullet;					// the pointer of the board where the shares can be uploaded
@@ -34,20 +34,20 @@ class Participant {
 		context_t context;					
 		socket_t broker;
 		pollitem_t items[1];
-		vector<int> maskBuffer, sumMaskBuffer, refreshBuffer, reconstructBuffer;
+		vector<int> maskBuffer, sumMaskBuffer, reconstructBuffer;
 		vector<Ciphertext> leaderBuffer;
-		mutex maskMutex, leaderMutex, reconstructMutex, refreshMutex;
-		condition_variable maskCv, leaderCv, reconstructCv, refreshCv;
+		mutex maskMutex, leaderMutex, reconstructMutex;
+		condition_variable maskCv, leaderCv, reconstructCv;
 
 	public:
+		atomic<size_t> total_bytes_received{ 0 };
 		bool leader = false;				// is the Participant a leader?
 		bool stopReceiving = false;
 		int id;
 		Polynomial polynomial;
 		string location;
-		Participant(int s, int mod, int given_id, Bulletin &board) : context(1), broker(context, ZMQ_ROUTER), polynomial(mod), bullet(board) {
+		Participant(int mod, int given_id, Bulletin &board) : context(1), broker(context, ZMQ_ROUTER), polynomial(mod), bullet(board) {
 			id = given_id;
-			secret = s;
 			items[0] = { static_cast<void*>(broker), 0, ZMQ_POLLIN, 0 };
 		}
 
@@ -95,10 +95,6 @@ class Participant {
 			catch (exception &e) {}
 		}
 
-		int getSecret() {
-			return secret;
-		}
-
 		void sendMsg(string dest, const Ciphertext& piece, string type) {
 			socket_t worker(context, ZMQ_DEALER);
 			worker.connect(dest);
@@ -135,10 +131,13 @@ class Participant {
 			broker.recv(id, recv_flags::none);
 			broker.recv(msg, recv_flags::none);
 
+			total_bytes_received += (identity.size() + type.size() + id.size() + msg.size());
+
+
 			string typeSwitch = type.to_string();
 			string senderId = id.to_string();
 			string data(static_cast<char*>(msg.data()), msg.size()); //https://www.geeksforgeeks.org/cpp/static_cast-in-cpp/
-
+			
 			if (typeSwitch == "enc") {
 				stringstream ss(data);
 				Ciphertext result;
@@ -169,11 +168,6 @@ class Participant {
 				reconstructBuffer.push_back(stoi(data));
 				reconstructCv.notify_one();
 			}
-			else if (typeSwitch == "ref") {
-				lock_guard<mutex> lock(refreshMutex);
-				refreshBuffer.push_back(stoi(data));
-				refreshCv.notify_one();
-			}
 			else {
 				cout << "typeSwitch: " << typeSwitch << endl;
 				throw new exception;
@@ -185,7 +179,7 @@ class Participant {
 		//  2. SECRET GENERATION  \\
 		//\\//\\//\\//\\//\\//\\//\\
 
-		void startSecretGeneration() {
+		void startSecretGeneration(int secret) {
 			getKeyPairs(bullet);	// For each i, Pi generates a pair of key pki, ski
 
 			bullet.shares.push_back(bullet.E.encryptSecret(pk, secret));
@@ -219,6 +213,8 @@ class Participant {
 			for (int i = 0; i < max_users; ++i) {
 				tNumberOfPoints.push_back(bullet.points[i]);
 			}
+
+			int secret = downloadFromBoard(this->id);
 
 			Ciphertext newPiece = newUserJoin(						// Step 3 and 5
 				newUserId,
@@ -334,7 +330,6 @@ class Participant {
 		void decryptAndSaveSecret(Ciphertext newShare) {
 			int new_piece;
 			bullet.E.decryptSecret(sk, newShare, new_piece);
-			secret = new_piece;
 			return;
 		}
 
@@ -344,6 +339,7 @@ class Participant {
 
 		int startSecretReconstruction() {
 			int max_users = bullet.t;
+			int secret = downloadFromBoard(this->id);
 
 			int temp = -1;
 			for (int i = 0; i < max_users; ++i) {
@@ -389,69 +385,9 @@ class Participant {
 			return temp;
 		}
 
-		//\\//\\//\\//\\//\\//\\//\\
-		//       5. REFRESH       \\
-		//\\//\\//\\//\\//\\//\\//\\
-
-		void startproactiveRefresh() {
-			int max_users = bullet.shares.size();
-
-			int temp = -1;
-			for (int i = 0; i < max_users; ++i) {
-				if (bullet.ids[i] == id) {
-					temp = i;
-					break;
-				}
-			}
-
-			if (temp == -1) return;
-
-			vector<int> new_poly(max_users);
-			new_poly[0] = 0;
-			for (int i = 1; i < bullet.t; ++i) {
-				new_poly[i] = rand() % bullet.modulo;
-			}
-
-			for (int i = 0; i < max_users; ++i) {
-				int x = 0;
-				temp = bullet.ids[i];
-				for (int c = 1; c < bullet.t; ++c) {
-					x += (long long)((new_poly[c] * temp) % bullet.modulo) % bullet.modulo;
-
-					temp *= bullet.ids[i];
-					temp %= bullet.modulo;
-				}
-
-				if (bullet.ids[i] == this->id) {
-					lock_guard<mutex> lock(refreshMutex);
-					refreshBuffer.push_back(x);
-				}
-				else {
-					sendMsg(bullet.destinations[i], x, "ref");
-				}
-			}
-
-			unique_lock<mutex> lock(refreshMutex);
-			refreshCv.wait(lock, [this, max_users] {
-				return refreshBuffer.size() >= max_users;
-			});
-
-			int sum = 0;
-			for (int x : refreshBuffer) {
-				sum += x;
-			}
-			sum %= bullet.modulo;
-			refreshBuffer.clear(); 
-
-			secret += sum;
-			secret %= bullet.modulo;
-
-			if (this->id != -1 && this->id < bullet.shares.size()) {
-				bullet.shares[this->id] = bullet.E.encryptSecret(pk, secret);
-			}
-
-			return;
+		int downloadFromBoard(int id) {
+			int temp;
+			bullet.E.decryptSecret(sk, bullet.shares[id-1], temp);
+			return temp;
 		}
-
-		
 };

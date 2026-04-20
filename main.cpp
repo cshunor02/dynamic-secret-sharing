@@ -20,7 +20,7 @@ int main(int argc, char* argv[]) {
     //  1. SETUP  \\
     //\\//\\//\\//\\
 
-    int NUM_OF_PARTICIPANTS = 10;
+    int NUM_OF_PARTICIPANTS = 3;
     int t = 2;
     int MODULO = 1021;
 
@@ -39,10 +39,9 @@ int main(int argc, char* argv[]) {
     vector<Participant*> participants;
 
     for (int i = 0; i < t; ++i) {
-        int secret = rand() % MODULO;
         int id = i + 1;
 
-        Participant* p = new Participant(secret, MODULO, id, bullet);
+        Participant* p = new Participant(MODULO, id, bullet);
         p->location = "tcp://127.0.0.1:" + to_string(5550 + id);
         participants.push_back(p);
 
@@ -58,7 +57,8 @@ int main(int argc, char* argv[]) {
     
     auto sec_gen_start = high_resolution_clock::now();
     for (auto p : participants) {
-        p->startSecretGeneration();
+        int secret = rand() % MODULO;
+        p->startSecretGeneration(secret);
     }
     auto sec_gen_stop = high_resolution_clock::now();
 
@@ -80,7 +80,7 @@ int main(int argc, char* argv[]) {
 
     for (int i = 0; i < (NUM_OF_PARTICIPANTS - t); ++i) {
         vector<thread> workerThreads;
-        Participant* p = new Participant(0, MODULO, t + 1 + i, bullet);
+        Participant* p = new Participant(MODULO, t + 1 + i, bullet);
         p->location = "tcp://127.0.0.1:" + to_string(5550 + t + 1 + i);
 
         p->getKeyPairs(bullet);
@@ -129,33 +129,9 @@ int main(int argc, char* argv[]) {
 	//       5. REFRESH       \\
 	//\\//\\//\\//\\//\\//\\//\\
 
-    /*
-    for (auto p : participants) {
-        cout << p->id << "'s share is: " << p->getSecret() << endl;
-    }
-    */
-
-    auto refresh_start = high_resolution_clock::now();
-
-    vector<thread> refreshThreads;
-    for (auto p : participants) {
-        refreshThreads.push_back(thread(&Participant::startproactiveRefresh, p));
-    }
-
-    for (auto& x : refreshThreads) {
-        x.join();
-    }
-
-    auto refresh_stop = high_resolution_clock::now();
-
     for (auto p : participants) p->stopReceiving = true;
     for (auto& x : threads) x.join();
 
-    /*
-    for (auto p : participants) {
-        cout << p->id << "'s share is: " << p->getSecret() << endl;
-    }
-    */
     //\\//\\//\\//\\//\\//\\//\\
 	//       6. RESULTS       \\
 	//\\//\\//\\//\\//\\//\\//\\
@@ -164,18 +140,14 @@ int main(int argc, char* argv[]) {
     auto sec_gen_dur = duration_cast<milliseconds>(sec_gen_stop - sec_gen_start).count();
     double avg_share_gen = (NUM_OF_PARTICIPANTS - t) > 0 ? (double)total_share_gen_time / (NUM_OF_PARTICIPANTS - t) : 0;
     auto recon_dur = duration_cast<milliseconds>(recon_stop - recon_start).count();
-    auto refresh_dur = duration_cast<milliseconds>(refresh_stop - refresh_start).count();
 
-    cout << setup_dur << "," << sec_gen_dur << "," << avg_share_gen << "," << total_share_gen_time << "," << recon_dur << "," << refresh_dur << endl;
 
-    /*
-    cout << "1. Setup: " << setup_dur << " ms" << endl;
-    cout << "2. Key Generation: " << sec_gen_dur << " ms" << endl;
-    cout << "3. Share Generation (average): " << avg_share_gen << " ms" << endl;
-    cout << "3. Share Generation (total): " << total_share_gen_time << " ms" << endl;
-    cout << "4. Secret Reconstruction: " << recon_dur << " ms" << endl;
-    cout << "5. Proactive Refresh: " << refresh_dur << " ms" << endl;
-    */
+    double total_mb = 0;
+
+    for (auto p : participants) {
+        total_mb += p->total_bytes_received.load() / (1024.0 * 1024.0);
+    }
+    cout << setup_dur << "," << sec_gen_dur << "," << avg_share_gen << "," << total_share_gen_time << "," << recon_dur << "," << total_mb << endl;
 
     for (auto p : participants) delete p;
 
