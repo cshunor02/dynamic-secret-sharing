@@ -31,41 +31,38 @@ class Participant {
 		SecretKey sk;						// Secret key
 		Bulletin &bullet;					// the pointer of the board where the shares can be uploaded
 		int summedPiece;					// the sum of the shared secrets
-		context_t context;					
-		socket_t broker;
-		pollitem_t items[1];
-		vector<int> maskBuffer, sumMaskBuffer, reconstructBuffer;
+
+		// ZeroMQ
+		context_t context;					// to manage threads in ZeroMQ 
+		socket_t broker;					// ROUTER socket for communication
+		pollitem_t items[1];				// to check incoming messages on the socket
+
+		vector<int> maskBuffer, sumMaskBuffer, reconstructBuffer; // buffers for messages
 		vector<Ciphertext> leaderBuffer;
-		mutex maskMutex, leaderMutex, reconstructMutex;
-		condition_variable maskCv, leaderCv, reconstructCv;
+
+		mutex maskMutex, leaderMutex, reconstructMutex; // synchronization primitives
+		condition_variable maskCv, leaderCv, reconstructCv; // synchronization primitives
 
 	public:
 		atomic<size_t> total_bytes_received{ 0 };
-		bool leader = false;				// is the Participant a leader?
-		bool stopReceiving = false;
-		int id;
+		bool leader = false;				// determine if the Participant is a leader
+		bool stopReceiving = false;			// stop receiving messages
+		int id;								// the Participant's unique identification number
 		Polynomial polynomial;
 		string location;
-		Participant(int mod, int given_id, Bulletin &board) : context(1), broker(context, ZMQ_ROUTER), polynomial(mod), bullet(board) {
+		Participant(int mod, int given_id, Bulletin &board) : context(1), broker(context, ZMQ_ROUTER), bullet(board) {
 			id = given_id;
 			items[0] = { static_cast<void*>(broker), 0, ZMQ_POLLIN, 0 };
 		}
 
-		void startPolynomialCalculation(int connected) {
-			polynomial.generateRandomPolynomial(connected - 1);
-			return;
-		}
-
-		// Get the which's user point
-		int getPointValue(int piece, int which) {
-			return polynomial.getPolynomial(piece, which);
-		}
-
+		// In Setup, the Participant generates their pk and sk keypairs
 		void getKeyPairs(Bulletin &board) {
 			board.E.generateKeys(id, sk, pk);
 			board.public_keys.push_back(pk);
 		}
 
+		// When a new participant joins to the calculation
+		// the function generates their share
 		Ciphertext newUserJoin(int newUserId, PublicKey newUserPK, int share, vector<array<int, 2>> points, int modulo, Homomorphic& E, int mask) {
 			double lambda = Polynomial::lagrangeBasisPolynomial(points, id, newUserId);
 
@@ -76,12 +73,13 @@ class Participant {
 			return E.encryptSecret(newUserPK, newShare);
 		}
 
+		// Starting the communication node
 		// https://zguide.zeromq.org/docs/chapter3/#The-DEALER-to-ROUTER-Combination
 		void startServer() {
 			broker.bind(location);
 			this->location = broker.get(sockopt::last_endpoint);
 
-			broker.set(sockopt::rcvtimeo, 100); // Time limit
+			broker.set(sockopt::rcvtimeo, 100); // Time limit to check if socket starts
 
 			try {
 				while (!stopReceiving) {
@@ -95,6 +93,7 @@ class Participant {
 			catch (exception &e) {}
 		}
 
+		// To send the Ciphertext as serialized message
 		void sendMsg(string dest, const Ciphertext& piece, string type) {
 			socket_t worker(context, ZMQ_DEALER);
 			worker.connect(dest);
@@ -109,6 +108,7 @@ class Participant {
 			return;
 		}
 
+		// To send an integer to another participant
 		void sendMsg(string dest, int piece, string type) {
 			socket_t worker(context, ZMQ_DEALER);
 			worker.connect(dest);
@@ -119,6 +119,7 @@ class Participant {
 			return;
 		}
 
+		// To handle message receiving
 		//https://stackoverflow.com/questions/73803967/zmqmessage-t-assign-a-string
 		void receiveCipher() {
 			// Receive the id, an empty frame, and the serialized Ciphertext
@@ -133,12 +134,11 @@ class Participant {
 
 			total_bytes_received += (identity.size() + type.size() + id.size() + msg.size());
 
-
 			string typeSwitch = type.to_string();
 			string senderId = id.to_string();
 			string data(static_cast<char*>(msg.data()), msg.size()); //https://www.geeksforgeeks.org/cpp/static_cast-in-cpp/
 			
-			if (typeSwitch == "enc") {
+			if (typeSwitch == "enc") { // sharing a piece of the new share in Share Generation
 				stringstream ss(data);
 				Ciphertext result;
 				bullet.E.loadCiphertext(result, ss);
@@ -146,31 +146,30 @@ class Participant {
 				leaderBuffer.push_back(result);
 				leaderCv.notify_one();
 			}
-			else if (typeSwitch == "msk") {
+			else if (typeSwitch == "msk") {  // Adding up the shares, to get the sum of the masks
 				lock_guard<mutex> lock(maskMutex);
 				maskBuffer.push_back(stoi(data));
 				maskCv.notify_one();
 			}
-			else if (typeSwitch == "sum") {
+			else if (typeSwitch == "sum") {  // Sending out the summed mask to the Leader
 				lock_guard<mutex> lock(leaderMutex);
 				sumMaskBuffer.push_back(stoi(data));
 				leaderCv.notify_one();
 			}
-			else if (typeSwitch == "new") {
+			else if (typeSwitch == "new") {  // The new user receives their secret share
 				stringstream ss(data);
 				Ciphertext newShare;
 				bullet.E.loadCiphertext(newShare, ss);
 
 				decryptAndSaveSecret(newShare);
 			}
-			else if (typeSwitch == "rec") {
+			else if (typeSwitch == "rec") { // For recovering the secret
 				lock_guard<mutex> lock(reconstructMutex);
 				reconstructBuffer.push_back(stoi(data));
 				reconstructCv.notify_one();
 			}
 			else {
-				cout << "typeSwitch: " << typeSwitch << endl;
-				throw new exception;
+				return;
 			}
 			return;
 		}
@@ -179,9 +178,8 @@ class Participant {
 		//  2. SECRET GENERATION  \\
 		//\\//\\//\\//\\//\\//\\//\\
 
+		// Uploading the public key to the bulletin board
 		void startSecretGeneration(int secret) {
-			getKeyPairs(bullet);	// For each i, Pi generates a pair of key pki, ski
-
 			bullet.shares.push_back(bullet.E.encryptSecret(pk, secret));
 			return;
 		}
@@ -272,7 +270,6 @@ class Participant {
 			maskBuffer.clear();
 
 			// Send mask sum to Leader - Step 7 part 2
-
 			if (leader) {
 				{
 					lock_guard<mutex> lock(leaderMutex);
@@ -287,6 +284,7 @@ class Participant {
 			return;
 		}
 
+		// If the user is the leader, run the function
 		void leaderTasks() {
 			int max_users = bullet.t;
 
@@ -311,7 +309,6 @@ class Participant {
 			}
 
 			Ciphertext encMask = bullet.E.encryptSecret(*(bullet.public_keys.end() - 1), sum);
-
 			Ciphertext sumEncShares = bullet.E.sumShares(leaderBuffer);
 
 			sumMaskBuffer.clear();
@@ -321,12 +318,13 @@ class Participant {
 			bullet.E.addShares(encMask, sumEncShares, newUserShare);
 
 			bullet.shares.push_back(newUserShare);
-
 			sendMsg(bullet.destinations.back(), newUserShare, "new");
 
 			return;
 		}
 
+		// After getting the message as the new user
+		// the new user can decrypt their share
 		void decryptAndSaveSecret(Ciphertext newShare) {
 			int new_piece;
 			bullet.E.decryptSecret(sk, newShare, new_piece);
@@ -385,6 +383,7 @@ class Participant {
 			return temp;
 		}
 
+		// To decrypt the downloaded share from the bulletin board
 		int downloadFromBoard(int id) {
 			int temp;
 			bullet.E.decryptSecret(sk, bullet.shares[id-1], temp);

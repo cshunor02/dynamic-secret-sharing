@@ -12,19 +12,9 @@ find_package(SEAL REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(ZMQ libzmq)
 
-add_executable (dynamic 
-    "homomorphic.cpp" 
-    "homomorphic.h"
-    "ecc-cpp/src/bigint.cpp"
-    "ecc-cpp/src/ecc.cpp"
-    "ecc-cpp/src/ecdh.cpp"
-    "ecc-cpp/src/ecdsa.cpp"
-    "ecc-cpp/src/blake2b.cpp"
- "ecc.cpp" "main.cpp" "polynomial.cpp" "bulletin.cpp" "zmq.hpp")
+add_executable (dynamic "homomorphic.cpp" "main.cpp" "polynomial.cpp" "bulletin.cpp" "zmq.hpp")
 
 target_include_directories(dynamic PRIVATE 
-    "${CMAKE_CURRENT_SOURCE_DIR}/ecc-cpp/include"
-    "${CMAKE_CURRENT_SOURCE_DIR}/ecc-cpp/src"
     "${CMAKE_CURRENT_SOURCE_DIR}/libzmq/include"
     "${CMAKE_CURRENT_SOURCE_DIR}"
 )

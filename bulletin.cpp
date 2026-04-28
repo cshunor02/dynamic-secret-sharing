@@ -16,21 +16,20 @@ using namespace zmq;
 
 class Bulletin {
 public:
-	Homomorphic E;
-	vector<PublicKey> public_keys;
-	vector<Ciphertext> shares;
-	vector<int> ids;
-	vector<array<int, 2>> points;
-	vector<string> destinations;
-	int leaderId;
+	Homomorphic E;	// Homomorphic encryption
+	vector<PublicKey> public_keys; 	// The vector of the Participant's public keys
+	vector<Ciphertext> shares;		// The secret shares of the Participants
+	vector<int> ids;				// The IDs of the Participants
+	vector<array<int, 2>> points;	// The ids and the shares are combined
+	vector<string> destinations;	// The port numbers of the Participants
+	int leaderId;					// The ID number of the leader Participant
+	int modulo;						// The modulo M number
+	int t;							// The threshold t number
 
-	int modulo;
-	int t;
+	// Default constructor
+	Bulletin() {}
 
-	Bulletin() {
-	}
-
-	// t participants agree on an additive homomorphic encryption E and add E to the public bulletin board
+	// t participants agree on an additive homomorphic encryption E
 	void initialize(size_t security, int modulo, int treshold) {
 		E.setParameters(security, modulo);
 		this->modulo = modulo;

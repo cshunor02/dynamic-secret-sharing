@@ -10,9 +10,11 @@ class Homomorphic {
     private:
     public:
         unique_ptr<SEALContext> context;
-        Homomorphic() {
-        }
 
+        // Default constructor
+        Homomorphic() {}
+
+        // We set the parameters of the homomorphic encryption
         void setParameters(size_t security, int modulo) {
             EncryptionParameters parms(scheme_type::bfv);
             parms.set_poly_modulus_degree(security);
@@ -22,6 +24,7 @@ class Homomorphic {
             context = make_unique<SEALContext>(parms);
         }
 
+        // Generating pk-sk pairs, making it ID dependent
         // Using seal/native/src/seal/keygenerator.cpp as reference
         // from line 67 to 81
         void generateKeys(long unsigned int id, SecretKey& sk, PublicKey& pk) {
@@ -45,6 +48,7 @@ class Homomorphic {
             return; 
         }
 
+        // Encrypting the secret with the user's public key
         Ciphertext encryptSecret(PublicKey pk, int secret) {
             Encryptor encryptor(*context, pk);
 
@@ -60,6 +64,7 @@ class Homomorphic {
             return enc;
         }
 
+        // Decrypting the secret with the users secret key
         void decryptSecret(SecretKey sk, Ciphertext& enc, int& result) {
             Decryptor decryptor(*context, sk);
 
@@ -70,12 +75,14 @@ class Homomorphic {
             return;
         }
 
+        // Adding up two HE ciphertext
         void addShares(Ciphertext a, Ciphertext b, Ciphertext& res) {
             Evaluator evaluator(*context);
             evaluator.add(a, b, res);
             return;
         }
 
+        // Summing up * HE ciphertext, using the SEAL built-in add_many()
         Ciphertext sumShares(vector<Ciphertext> shares) {
             Evaluator evaluator(*context);
             Ciphertext res;
@@ -83,6 +90,7 @@ class Homomorphic {
             return res;
         }
 
+        // To get the noise budget of a single ciphertext
         int getNoiseBudget(Ciphertext& encrypted, SecretKey secret_key) {
             Decryptor decryptor(*context, secret_key);
 
@@ -90,6 +98,7 @@ class Homomorphic {
             return budget;
         }
 
+        // To load the HE ciphertext from stream
         void loadCiphertext(Ciphertext& dest, istream& stream) {
             dest.load(*context, stream);
         }

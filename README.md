@@ -35,3 +35,11 @@ After extracting the `zip` file, follow the below listed instructions:
 * `t` is mandatory, the threashold, ($2 \le t \le N$)
 * `modulo` is mandatory, the limit representing $\mathbb{F}$ field.
 * `repetitions` is the number which indicates how many times the program should perform the tasks (by default, it is `1`)
+
+## Classes
+
+* **Bulletin** - Manages the public bulletin board, collections of variables of user data.
+* **Homomorphic** - Homomorphic encryptor class (for Microsoft SEAL), including share addition, encryption and decryption, noise budget management.
+* **Participant** - The core user class, it sends and receives ZeroMQ based messages, and executes the protocol's steps.
+* **Polynomial** - Calculating the Lagrange basis polynomial.
+* **Main** - Initialization of the threads and objects, and running the program
