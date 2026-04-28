@@ -36,7 +36,4 @@ public:
 		this->t = treshold;
 		return;
 	}
-
-
-
 };
