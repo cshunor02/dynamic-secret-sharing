@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# NOTE: This script was generated with the assistance of Google Gemini 3.0
+# The logic and correctness have been manually verified.
+
 if [ "$#" -lt 3 ]; then
     exit 1
 fi
