@@ -1,22 +1,16 @@
 #include "seal/seal.h"
 #include <vector>
-#include <cstdlib>
-#include <ctime>
-#include <cstring>
-#include <sstream>
-
-#include <zmq.hpp>
-#include <zmq_addon.hpp>
+#include <string>
+#include <array>
 
 using namespace std;
 using namespace seal;
-using namespace zmq;
 
 #include "homomorphic.cpp"
 
 class Bulletin {
 public:
-	Homomorphic E;	// Homomorphic encryption
+	Homomorphic E;					// Homomorphic encryption
 	vector<PublicKey> public_keys; 	// The vector of the Participant's public keys
 	vector<Ciphertext> shares;		// The secret shares of the Participants
 	vector<int> ids;				// The IDs of the Participants

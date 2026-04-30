@@ -1,10 +1,7 @@
-#include "seal/seal.h"
 #include <vector>
-#include <cstdlib>
-#include <cstring>
+#include <array>
 
 using namespace std;
-using namespace seal;
 
 class Polynomial {
 public:

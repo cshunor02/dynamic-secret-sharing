@@ -1,15 +1,13 @@
-#include <stdio.h>
 #include <iostream>
 #include <ctime>
-#include "participant.cpp"
-
+#include <vector>
+#include <stdexcept>
 #include <future>
 #include <string>
 #include <thread>
 #include <chrono>
 
-#include "zmq.hpp"
-#include "zmq_addon.hpp"
+#include "participant.cpp"
 
 using namespace std;
 using namespace zmq;

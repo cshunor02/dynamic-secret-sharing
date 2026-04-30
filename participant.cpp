@@ -1,18 +1,15 @@
 #include "seal/seal.h"
 #include <vector>
+#include <array>
 #include <cstdlib>
 #include <ctime>
-#include <cstring>
-#include <iostream>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <unistd.h>
 #include <cmath>
 #include <chrono>
 #include <thread>
 #include <string>
-#include <chrono>
 #include <atomic>
+#include <mutex>
+#include <condition_variable>
 
 #include <zmq.hpp>
 #include <zmq_addon.hpp>
@@ -48,8 +45,7 @@ class Participant {
 		bool leader = false;				// determine if the Participant is a leader
 		bool stopReceiving = false;			// stop receiving messages
 		int id;								// the Participant's unique identification number
-		Polynomial polynomial;
-		string location;
+		string location;					// the location of the user (localhost:port)
 		Participant(int mod, int given_id, Bulletin &board) : context(1), broker(context, ZMQ_ROUTER), bullet(board) {
 			id = given_id;
 			items[0] = { static_cast<void*>(broker), 0, ZMQ_POLLIN, 0 };
